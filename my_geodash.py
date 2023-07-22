@@ -10,6 +10,7 @@ pygame.mixer.init()
 
 WIDTH, HEIGHT = 800, 600
 GROUND = HEIGHT - 50
+WINSCORE = 10
 
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
@@ -24,12 +25,11 @@ class DifficultySettings:
     frequency: int
     
 DIFFICULTY_SETTINGS = {
-    'easy': DifficultySettings(min_speed=3, max_speed=5, min_height=40, max_height=50, frequency=100),
-    'normal': DifficultySettings(min_speed=8, max_speed=10, min_height=30, max_height=40, frequency=75),
-    'hard': DifficultySettings(min_speed=13, max_speed=15, min_height=20, max_height=40, frequency=50),
-    'impossible': DifficultySettings(min_speed=18, max_speed=50, min_height=10, max_height=50, frequency=100)
+    'easy': DifficultySettings(min_speed=10, max_speed=15, min_height=40, max_height=50, frequency=45),
+    'normal': DifficultySettings(min_speed=16, max_speed=25, min_height=30, max_height=40, frequency=50),
+    'hard': DifficultySettings(min_speed=26, max_speed=50, min_height=20, max_height=40, frequency=75),
+    'impossible': DifficultySettings(min_speed=51, max_speed=75, min_height=10, max_height=50, frequency=100)
 }
-
 
 class Player:
     SIZE = 50
@@ -70,11 +70,12 @@ class Player:
         collision = self.rect.colliderect(obstacle.rect)
         if collision and not self.colliding:
             self.colliding = True
+            pygame.mixer.music.load("media/collision.wav")
+            pygame.mixer.music.play()
             return True
         elif not collision:
             self.colliding = False
         return False
-
 
 class Obstacle:
 
@@ -100,15 +101,15 @@ class Obstacle:
 
 
 class Game:
-
     def __init__(self, shape, difficulty):
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.player = Player(WIDTH // 4, GROUND, shape)
-        self.difficulty = difficulty  # Define the difficulty attribute
+        self.difficulty = difficulty
         self.obstacle = self.create_obstacle()  # create the first obstacle
         self.score = 0
         self.collisions = 0
         self.frame = 0
+        self.obstacle_frequency_counter = 0  # Initialize the counter
 
     def display_status(self):
         score_text = font.render(f"Score: {self.score}", True, (0, 0, 0))
@@ -122,9 +123,7 @@ class Game:
         difficulty_settings = DIFFICULTY_SETTINGS[self.difficulty]
         obstacle_height = random.randint(difficulty_settings.min_height, difficulty_settings.max_height)
         obstacle_speed = random.randint(difficulty_settings.min_speed, difficulty_settings.max_speed)
-        new_obstacle = Obstacle(WIDTH, GROUND - obstacle_height, obstacle_height, obstacle_speed)
-        print(new_obstacle.rect.x, new_obstacle.rect.y, new_obstacle.HEIGHT, new_obstacle.speed)  # Print the properties
-        return new_obstacle
+        return Obstacle(WIDTH, GROUND - obstacle_height, obstacle_height, obstacle_speed)
 
 
     def run(self):
@@ -144,10 +143,9 @@ class Game:
             self.player.update()
             self.player.draw(self.screen)
 
-            if self.obstacle.rect.x < -self.obstacle.WIDTH: 
+            if self.obstacle.rect.x < -self.obstacle.WIDTH or self.obstacle_frequency_counter >= DIFFICULTY_SETTINGS[self.difficulty].frequency: 
                 self.obstacle = self.create_obstacle()  # create a new obstacle when the old one is off the screen
-                # print obstacle properties to check if it's changing or not every time is created
-                print(self.obstacle.rect.x, self.obstacle.rect.y, self.obstacle.speed)
+                self.obstacle_frequency_counter = 0  # reset the counter
 
             self.obstacle.update()
             self.obstacle.draw(self.screen)
@@ -159,6 +157,9 @@ class Game:
                 self.score -= 1
                 print("Collisions: " + str(self.collisions) + " of 2")
                 if self.collisions > 1:
+                    pygame.mixer.music.load("media/youlose.wav")
+                    pygame.mixer.music.play()
+                    pygame.time.delay(2000)
                     print("Game Over")
                     pygame.quit()
                     sys.exit()
@@ -166,13 +167,18 @@ class Game:
                 self.score += 1
                 print("Score: " + str(self.score))
 
-            if self.score == 10:
+            if self.score == WINSCORE:
+                pygame.mixer.music.load("media/youwin.wav")
+                pygame.mixer.music.play()
+                pygame.time.delay(2000)
                 print("You win!")
                 pygame.quit()
                 sys.exit()
 
             pygame.display.flip()
             self.frame += 1
+            self.obstacle_frequency_counter += 1  # increment the counter
+
 
 def start_menu():
     shape_options = {1: 'square', 2: 'circle', 3: 'triangle'}
