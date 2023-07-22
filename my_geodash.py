@@ -1,11 +1,12 @@
 import pygame
 import sys
-import time
+import random
+from dataclasses import dataclass
 
 pygame.init()
 pygame.font.init()
 font = pygame.font.SysFont(None, 36)
-pygame.mixer.init()
+pygame.mixer.init() 
 
 WIDTH, HEIGHT = 800, 600
 GROUND = HEIGHT - 50
@@ -13,6 +14,22 @@ GROUND = HEIGHT - 50
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
+
+@dataclass
+class DifficultySettings:
+    min_speed: int
+    max_speed: int    
+    min_height: int
+    max_height: int
+    frequency: int
+    
+DIFFICULTY_SETTINGS = {
+    'easy': DifficultySettings(min_speed=3, max_speed=5, min_height=40, max_height=50, frequency=100),
+    'normal': DifficultySettings(min_speed=8, max_speed=10, min_height=30, max_height=40, frequency=75),
+    'hard': DifficultySettings(min_speed=13, max_speed=15, min_height=20, max_height=40, frequency=50),
+    'impossible': DifficultySettings(min_speed=18, max_speed=50, min_height=10, max_height=50, frequency=100)
+}
+
 
 class Player:
     SIZE = 50
@@ -58,22 +75,22 @@ class Player:
             self.colliding = False
         return False
 
-class Obstacle:
-    WIDTH, HEIGHT = 50, 50
-    SPEED = 10
 
-    def __init__(self, x, y):
+class Obstacle:
+
+    WIDTH = 50
+
+    def __init__(self, x, y, height, speed):
+        self.HEIGHT = height
         self.rect = pygame.Rect(x, y, self.WIDTH, self.HEIGHT)
         self.passed = False
+        self.speed = speed
 
     def draw(self, screen):
         pygame.draw.rect(screen, GREEN, self.rect)
 
     def update(self):
-        self.rect.x -= self.SPEED
-        if self.rect.x < -self.WIDTH:
-            self.rect.x = WIDTH
-            self.passed = False
+        self.rect.x -= self.speed
 
     def is_passed_by(self, player):
         if self.rect.x < player.rect.x and not self.passed:
@@ -82,60 +99,94 @@ class Obstacle:
         return False
 
 
-def display_status(screen, score, lives):
-    score_text = font.render(f"Score: {score}", True, (0, 0, 0))  # Render the score as text
-    screen.blit(score_text, (WIDTH - score_text.get_width() - 10, 10))  # Draw the score on the right side of the screen
+class Game:
 
-    for i in range(lives):  # Draw one heart for each remaining life
-        heart = pygame.image.load('media/heart_16x16_alpha.png')  # Load the heart image
-        heart = pygame.transform.scale(heart, (30, 30))  # Scale it to the right size
-        screen.blit(heart, (10 + i * 40, 10))  # Draw the heart on the left side of the screen
+    def __init__(self, shape, difficulty):
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        self.player = Player(WIDTH // 4, GROUND, shape)
+        self.difficulty = difficulty  # Define the difficulty attribute
+        self.obstacle = self.create_obstacle()  # create the first obstacle
+        self.score = 0
+        self.collisions = 0
+        self.frame = 0
+
+    def display_status(self):
+        score_text = font.render(f"Score: {self.score}", True, (0, 0, 0))
+        self.screen.blit(score_text, (WIDTH - score_text.get_width() - 10, 10))
+        for i in range(2 - self.collisions):
+            heart = pygame.image.load('media/heart_16x16_alpha.png')
+            heart = pygame.transform.scale(heart, (30, 30))
+            self.screen.blit(heart, (10 + i * 40, 10))
+
+    def create_obstacle(self):  # function to create a new obstacle
+        difficulty_settings = DIFFICULTY_SETTINGS[self.difficulty]
+        obstacle_height = random.randint(difficulty_settings.min_height, difficulty_settings.max_height)
+        obstacle_speed = random.randint(difficulty_settings.min_speed, difficulty_settings.max_speed)
+        new_obstacle = Obstacle(WIDTH, GROUND - obstacle_height, obstacle_height, obstacle_speed)
+        print(new_obstacle.rect.x, new_obstacle.rect.y, new_obstacle.HEIGHT, new_obstacle.speed)  # Print the properties
+        return new_obstacle
 
 
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    def run(self):
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
 
-player = Player(WIDTH // 4, GROUND, 'circle')
-obstacle = Obstacle(WIDTH, GROUND)
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        self.player.jump()
 
-score = 0
-collisions = 0
+            self.screen.fill(WHITE)
+            self.display_status()
 
-while True:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
+            self.player.update()
+            self.player.draw(self.screen)
 
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                player.jump()
+            if self.obstacle.rect.x < -self.obstacle.WIDTH: 
+                self.obstacle = self.create_obstacle()  # create a new obstacle when the old one is off the screen
+                # print obstacle properties to check if it's changing or not every time is created
+                print(self.obstacle.rect.x, self.obstacle.rect.y, self.obstacle.speed)
 
-    screen.fill(WHITE)
-    display_status(screen, score, 2 - collisions)
+            self.obstacle.update()
+            self.obstacle.draw(self.screen)
 
-    player.update()
-    player.draw(screen)
-    obstacle.update()
-    obstacle.draw(screen)
+            pygame.time.delay(50)
 
-    pygame.time.delay(50)
+            if self.player.collides_with(self.obstacle):
+                self.collisions += 1
+                self.score -= 1
+                print("Collisions: " + str(self.collisions) + " of 2")
+                if self.collisions > 1:
+                    print("Game Over")
+                    pygame.quit()
+                    sys.exit()
+            elif self.obstacle.is_passed_by(self.player):
+                self.score += 1
+                print("Score: " + str(self.score))
 
-    if player.collides_with(obstacle):
-        collisions += 1
-        score -= 1
-        print("Collisions: " + str(collisions) + " of 2")
-        if collisions > 1:
-            print("Game Over")
-            pygame.quit()
-            sys.exit()
-        time.sleep(0.5)
-    elif obstacle.is_passed_by(player):
-        score += 1
-        print("Score: " + str(score))
+            if self.score == 10:
+                print("You win!")
+                pygame.quit()
+                sys.exit()
 
-    if score == 10:
-        print("You win!")
-        pygame.quit()
-        sys.exit()
+            pygame.display.flip()
+            self.frame += 1
 
-    pygame.display.flip()
+def start_menu():
+    shape_options = {1: 'square', 2: 'circle', 3: 'triangle'}
+    difficulty_options = {1: 'easy', 2: 'normal', 3: 'hard', 4: 'impossible'}
+
+    shape_choice = int(input("Choose shape: 1 for square, 2 for circle, 3 for triangle: "))
+    difficulty_choice = int(input("Choose difficulty: 1 for easy, 2 for normal, 3 for hard, 4 for impossible: "))
+    
+    shape = shape_options.get(shape_choice, 'square')  # defaults to 'square' if an invalid number is entered
+    difficulty = difficulty_options.get(difficulty_choice, 'easy')  # defaults to 'easy' if an invalid number is entered
+
+    game = Game(shape, difficulty)
+    game.run()
+
+    
+if __name__ == "__main__":
+    start_menu()
